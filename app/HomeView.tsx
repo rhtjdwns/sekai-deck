@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getMasterSnapshot } from "@/lib/master";
 import { REGIONS, regionHref, type Region } from "@/lib/region";
 import OwnedSummary from "./OwnedSummary";
+import PatchNotes from "./PatchNotes";
 import { TutorialStartButton } from "./Tutorial";
 import "./home.css";
 
@@ -25,7 +26,7 @@ export default async function HomeView({ region }: { region: Region }) {
   return (
     <main className="page home">
       <header className="home-head">
-        <h1>세카이 덱 짜기</h1>
+        <h1>세카이 덱 메이커</h1>
         <p className="sub">
           프로젝트 세카이 {REGIONS[region].label} 카드 {cards.length.toLocaleString()}장 중 내가 가진 카드로 이벤트 덱을
           짭니다.
@@ -77,6 +78,8 @@ export default async function HomeView({ region }: { region: Region }) {
           </Link>
         </li>
       </ol>
+
+      <PatchNotes />
     </main>
   );
 }

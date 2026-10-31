@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { CardView, Rarity } from "@/lib/master";
 import type { OwnedCard } from "@/lib/presets";
 import { detectTilesWithCut, readDigits, tileFeature, type RGBAImage, type TileBox } from "@/lib/screenshot";
+import { CARD_SHOT_EXAMPLE } from "./guideImage";
+import "./shotGuide.css";
 
 const RARITY_LABEL: Record<Rarity, string> = {
   rarity_4: "★4",
@@ -254,7 +256,10 @@ export default function ScreenshotImport({
                 <li>
                   목록에서 <strong>스킬 레벨</strong>을 골라요. 카드마다 아래에 &quot;SLv.4&quot;처럼 스킬 레벨이 표시돼요.
                 </li>
-                <li>카드가 잘리지 않게 화면을 캡처해서 올려 주세요. 여러 장을 나눠 찍어 한꺼번에 올려도 돼요.</li>
+                <li>
+                  아래 예시처럼 카드가 <strong>온전한 사각형</strong>으로 보이게 캡처해서 올려 주세요. 여러 장을 나눠 찍어
+                  한꺼번에 올려도 돼요.
+                </li>
               </ol>
               <div className="shot-guide-demo" aria-hidden="true">
                 <span className="shot-guide-sortbtn">스킬 레벨 ▾</span>
@@ -269,6 +274,21 @@ export default function ScreenshotImport({
                 </ul>
               </div>
             </div>
+            <figure className="shot-guide-example">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={CARD_SHOT_EXAMPLE}
+                alt="스킬 레벨로 정렬한 게임 멤버 목록 화면 예시. 카드 칸이 잘리지 않은 온전한 사각형으로 보인다"
+                width={480}
+                height={271}
+              />
+              <figcaption>
+                <strong>이렇게 찍어 주세요.</strong> 멤버 목록을 스킬 레벨로 정렬한 화면을 그대로 캡처하면 돼요. 카드 칸이
+                위·아래·옆으로 잘리지 않은 <strong>온전한 사각형</strong>으로 보여야 하고, 카드 아래에 &quot;SLv.4&quot; 같은 스킬
+                레벨 띠가, 마스터 랭크가 있는 카드는 오른쪽 아래 다이아에 숫자가 보여야 해요. 사진 맨 아래 줄처럼 화면
+                가장자리에 걸려 일부만 보이는 칸은 자동으로 빠지니, 목록을 내리며 여러 장 찍어 주세요.
+              </figcaption>
+            </figure>
             <p className="shot-guide-note">
               다른 정렬에서는 카드 아래 띠에 스킬 레벨 대신 다른 값이 나와서, 카드 칸을 찾지 못하거나 스킬 레벨을 잘못 읽어요.
             </p>

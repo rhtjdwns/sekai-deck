@@ -10,3 +10,69 @@
 .home-head .tour-start {
   margin-top: 12px;
 }
+
+/* ---------- 패치 노트 ---------- */
+.patch {
+  margin-top: 40px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.patch h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.patch-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.patch-item + .patch-item {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.patch-head {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.patch-version {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.patch-item:first-child .patch-version {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.patch-item ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.patch-older {
+  margin-top: 14px;
+}
+.patch-older summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+.patch-older .patch-item:first-child .patch-version {
+  background: var(--paper);
+  border-color: var(--line);
+  color: var(--muted);
+}

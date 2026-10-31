@@ -29,6 +29,11 @@ export async function POST(req: Request) {
       ? body.fixedCardIds.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 5)
       : [],
     fixedLeaderId: Number.isInteger(Number(body.fixedLeaderId)) && Number(body.fixedLeaderId) > 0 ? Number(body.fixedLeaderId) : null,
+    fixedCharacterIds: Array.isArray(body.fixedCharacterIds)
+      ? body.fixedCharacterIds.map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 26).slice(0, 5)
+      : [],
+    fixedLeaderCharacterId:
+      Number(body.fixedLeaderCharacterId) >= 1 && Number(body.fixedLeaderCharacterId) <= 26 ? Number(body.fixedLeaderCharacterId) : null,
     region: regionOfRequest(req, body.region),
   };
   if (!Number.isFinite(input.eventId) || input.eventId <= 0) {

@@ -19,7 +19,7 @@ export default function SiteNav() {
     <header className="sitebar">
       <div className="sitebar-inner">
         <Link href={regionHref(region, "/")} className="brand">
-          세카이 덱 짜기
+          세카이 덱 메이커
         </Link>
         <nav aria-label="주 메뉴">
           {LINKS.map((l) => (

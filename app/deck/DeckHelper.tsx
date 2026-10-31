@@ -64,7 +64,16 @@ function formatTime(sec: number) {
   const s = Math.round(sec);
   return s >= 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${s}초`;
 }
-type Saved = { result: RecommendResult; presetName: string; at: number; fixed: number[]; leader: number | null };
+type Saved = {
+  result: RecommendResult;
+  presetName: string;
+  at: number;
+  fixed: number[];
+  leader: number | null;
+  /** 고정한 캐릭터와 리더로 고정한 캐릭터 */
+  chars: number[];
+  leaderChar: number | null;
+};
 
 const MAX_FIXED = 5;
 
@@ -114,6 +123,9 @@ export default function DeckHelper({
   const [fixed, setFixed] = useState<number[]>([]);
   const [fixedLeader, setFixedLeader] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
+  // 카드 대신 캐릭터만 고정 (그 캐릭터의 가장 좋은 카드를 골라 줌)
+  const [fixedChars, setFixedChars] = useState<number[]>([]);
+  const [fixedLeaderChar, setFixedLeaderChar] = useState<number | null>(null);
 
   const event = eventId !== undefined ? eventById.get(eventId) : undefined;
   const isCheerful = event?.eventType === "cheerful_carnival";
@@ -129,6 +141,30 @@ export default function DeckHelper({
   // 프리셋을 바꿔 보유하지 않게 된 카드는 고정에서 뺌
   const fixedOwned = fixed.filter((id) => owned[id] && cardById.has(id));
   const leaderOwned = fixedLeader !== null && fixedOwned.includes(fixedLeader) ? fixedLeader : null;
+  // 보유 카드가 있는 캐릭터만, 카드를 고정한 캐릭터는 빼고
+  const ownedCharIds = new Set(Object.keys(owned).map((id) => cardById.get(Number(id))?.characterId));
+  const fixedCardChars = new Set(fixedOwned.map((id) => cardById.get(id)?.characterId));
+  const charsOwned = fixedChars.filter((ch) => ownedCharIds.has(ch) && !fixedCardChars.has(ch));
+  const leaderCharOwned = leaderOwned === null && fixedLeaderChar !== null && charsOwned.includes(fixedLeaderChar) ? fixedLeaderChar : null;
+  const fixedTotal = fixedOwned.length + charsOwned.length;
+
+  /** 리더는 카드 하나 또는 캐릭터 하나만 */
+  const setLeaderCard = (id: number | null) => {
+    setFixedLeader(id);
+    if (id !== null) setFixedLeaderChar(null);
+  };
+  const setLeaderChar = (ch: number | null) => {
+    setFixedLeaderChar(ch);
+    if (ch !== null) setFixedLeader(null);
+  };
+  const addFixedChar = (ch: number) => {
+    if (fixedTotal >= MAX_FIXED || charsOwned.includes(ch)) return;
+    setFixedChars([...charsOwned, ch]);
+  };
+  const removeFixedChar = (ch: number) => {
+    setFixedChars(charsOwned.filter((x) => x !== ch));
+    if (leaderCharOwned === ch) setFixedLeaderChar(null);
+  };
 
   /** 카드 고정/해제. 같은 캐릭터 카드가 이미 고정돼 있으면 그 카드와 바꿈 */
   const toggleFixed = (id: number) => {
@@ -141,8 +177,14 @@ export default function DeckHelper({
     }
     const sameChar = fixedOwned.find((x) => cardById.get(x)?.characterId === card.characterId);
     const next = fixedOwned.filter((x) => x !== sameChar);
-    if (next.length >= MAX_FIXED) return;
+    // 이 캐릭터를 캐릭터로 고정해 두었으면 카드 고정으로 바꿈 (리더였다면 이 카드가 리더)
+    const charFixed = charsOwned.includes(card.characterId);
+    if (!charFixed && sameChar === undefined && fixedTotal >= MAX_FIXED) return;
     if (sameChar !== undefined && leaderOwned === sameChar) setFixedLeader(null);
+    if (charFixed) {
+      setFixedChars(charsOwned.filter((x) => x !== card.characterId));
+      if (leaderCharOwned === card.characterId) setLeaderCard(id);
+    }
     setFixed([...next, id]);
   };
 
@@ -170,6 +212,8 @@ export default function DeckHelper({
           growth: active.growth,
           fixedCardIds: fixedOwned,
           fixedLeaderId: leaderOwned,
+          fixedCharacterIds: charsOwned,
+          fixedLeaderCharacterId: leaderCharOwned,
           region,
         }),
       });
@@ -177,7 +221,15 @@ export default function DeckHelper({
       if (!res.ok) throw new Error(data.error ?? "덱을 계산하지 못했습니다.");
       setSaved((s) => ({
         ...s,
-        [id]: { result: data as RecommendResult, presetName: active.name, at: Date.now(), fixed: fixedOwned, leader: leaderOwned },
+        [id]: {
+          result: data as RecommendResult,
+          presetName: active.name,
+          at: Date.now(),
+          fixed: fixedOwned,
+          leader: leaderOwned,
+          chars: charsOwned,
+          leaderChar: leaderCharOwned,
+        },
       }));
     } catch (e) {
       setErrors((s) => ({ ...s, [id]: (e as Error).message }));
@@ -351,13 +403,14 @@ export default function DeckHelper({
 
               <section className="fixed-cards" aria-label="고정할 카드">
                 <div className="fixed-head">
-                  <h3>고정할 카드</h3>
+                  <h3>고정할 카드·캐릭터</h3>
                   <p className="hint">
-                    꼭 넣고 싶은 카드를 고르면 그 카드를 넣은 채로 나머지 자리를 가장 좋게 채워요. 최대 {MAX_FIXED}장까지,
-                    한 장은 리더 자리에 고정할 수 있어요.
+                    꼭 넣고 싶은 카드를 고르면 그 카드를 넣은 채로 나머지 자리를 가장 좋게 채워요. 카드 대신 캐릭터만 고르면 그
+                    캐릭터의 보유 카드 중 이 이벤트에서 가장 좋은 카드를 골라 줘요. 카드와 캐릭터를 합쳐 최대 {MAX_FIXED}개, 그중
+                    하나는 리더로 고정할 수 있어요.
                   </p>
                 </div>
-                {fixedOwned.length > 0 && (
+                {fixedTotal > 0 && (
                   <ul className="fixed-list">
                     {fixedOwned.map((id) => {
                       const c = cardById.get(id)!;
@@ -373,7 +426,7 @@ export default function DeckHelper({
                             type="button"
                             className="fixed-leader"
                             aria-pressed={leaderOwned === id}
-                            onClick={() => setFixedLeader(leaderOwned === id ? null : id)}
+                            onClick={() => setLeaderCard(leaderOwned === id ? null : id)}
                           >
                             리더
                           </button>
@@ -388,18 +441,74 @@ export default function DeckHelper({
                         </li>
                       );
                     })}
+                    {charsOwned.map((ch) => {
+                      const character = characters.find((x) => x.id === ch);
+                      return (
+                        <li key={`c-${ch}`} className="fixed-chip fixed-char" style={{ "--char": character?.color } as CSSProperties}>
+                          <span className="fixed-char-dot" aria-hidden="true" />
+                          <span className="fixed-name">
+                            {character?.name}
+                            <small>캐릭터 고정 (가장 좋은 카드 자동)</small>
+                          </span>
+                          <button
+                            type="button"
+                            className="fixed-leader"
+                            aria-pressed={leaderCharOwned === ch}
+                            onClick={() => setLeaderChar(leaderCharOwned === ch ? null : ch)}
+                          >
+                            리더
+                          </button>
+                          <button
+                            type="button"
+                            className="fixed-remove"
+                            aria-label={`${character?.name} 캐릭터 고정 해제`}
+                            onClick={() => removeFixedChar(ch)}
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
                 <div className="fixed-actions">
                   <button type="button" onClick={() => setPicking((p) => !p)} aria-expanded={picking}>
                     {picking ? "카드 고르기 닫기" : "+ 고정할 카드 고르기"}
                   </button>
-                  {fixedOwned.length > 0 && (
+                  <select
+                    className="fixed-char-select"
+                    value=""
+                    aria-label="고정할 캐릭터"
+                    disabled={fixedTotal >= MAX_FIXED}
+                    onChange={(e) => {
+                      if (e.target.value) addFixedChar(Number(e.target.value));
+                    }}
+                  >
+                    <option value="">+ 캐릭터만 고정</option>
+                    {units.map((u) => (
+                      <optgroup key={u.unit} label={u.name}>
+                        {characters
+                          .filter((ch) => ch.unit === u.unit && ownedCharIds.has(ch.id))
+                          .map((ch) => (
+                            <option
+                              key={ch.id}
+                              value={ch.id}
+                              disabled={charsOwned.includes(ch.id) || fixedCardChars.has(ch.id)}
+                            >
+                              {ch.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  {fixedTotal > 0 && (
                     <button
                       type="button"
                       onClick={() => {
                         setFixed([]);
                         setFixedLeader(null);
+                        setFixedChars([]);
+                        setFixedLeaderChar(null);
                       }}
                     >
                       고정 모두 해제
@@ -411,7 +520,7 @@ export default function DeckHelper({
                     cards={cards.filter((c) => owned[c.id])}
                     characters={characters}
                     fixed={fixedOwned}
-                    full={fixedOwned.length >= MAX_FIXED}
+                    full={fixedTotal >= MAX_FIXED}
                     onToggle={toggleFixed}
                   />
                 )}
@@ -558,9 +667,20 @@ function Results({
           {result.metaSource === "estimated" && <span className="est-badge">추정</span>}
           {result.metaSource === "average" && <span className="est-badge">평균</span>}
         </p>
-        {saved.fixed.length > 0 && (
+        {saved.fixed.length + saved.chars.length > 0 && (
           <p className="hint">
-            고정 카드 {saved.fixed.length}장을 넣은 덱이에요{saved.leader !== null && ", 리더도 고정했어요"}. 📌 표시가 고정한 카드예요.
+            {[
+              saved.fixed.length > 0 && `고정 카드 ${saved.fixed.length}장`,
+              saved.chars.length > 0 &&
+                `고정 캐릭터 ${saved.chars.map((ch) => charName.get(ch)).join(", ")}(가장 좋은 카드로 선택)`,
+            ]
+              .filter(Boolean)
+              .join("과 ")}
+            을 넣은 덱이에요
+            {saved.leaderChar !== null
+              ? `, 리더는 ${charName.get(saved.leaderChar)}로 고정했어요`
+              : saved.leader !== null && ", 리더도 고정했어요"}
+            . 📌 표시가 고정한 카드예요.
           </p>
         )}
       </div>
@@ -590,7 +710,7 @@ function Results({
           return (
             <li key={dc.cardId} className={`deck-card attr-border-${c?.attr ?? "cute"}`}>
               {i === 0 && <span className="leader">리더</span>}
-              {saved.fixed.includes(dc.cardId) && (
+              {(saved.fixed.includes(dc.cardId) || (c !== undefined && saved.chars.includes(c.characterId))) && (
                 <span className="pin" aria-label="고정한 카드">
                   📌
                 </span>

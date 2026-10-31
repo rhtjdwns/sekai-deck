@@ -1,5 +1,6 @@
 // 게임 마스터 데이터 (한국판: Sekai-World/sekai-master-db-kr-diff, 일본판: Sekai-World/sekai-master-db-diff)
 // 일본 서버도 카드·이벤트·캐릭터 번호가 한국판과 같아서, 한국판에 있는 것은 한국어 이름으로 보여 준다.
+import { fetchWithRetry } from "./fetchRetry";
 import { REGIONS, type Region } from "./region";
 
 // 카드 썸네일. 원본 이미지 서버가 핫링크를 막아서 우리 서버(/api/thumb)를 거쳐 받는다 (lib/thumbs.ts)
@@ -110,13 +111,26 @@ export interface MasterSnapshot {
   fetchedAt: number;
 }
 
+// 같은 파일을 여러 화면이 동시에 만들 때 한 번만 받도록 잠깐 보관 (일본판 cards.json은 40MB가 넘음).
+// 2MB가 넘는 파일은 Next 데이터 캐시에 들어가지 않아서, 이것이 없으면 화면마다 다시 받는다.
+const LOAD_TTL_MS = 10 * 60 * 1000;
+const loadMemo = new Map<string, { at: number; value: Promise<unknown> }>();
+
 async function load<T>(file: string, region: Region = "kr"): Promise<T> {
-  // 시간으로 만료시키지 않고, 오후 3시·8시 갱신(app/api/revalidate) 때만 새로 받음
-  const res = await fetch(`${REGIONS[region].masterBase}/${file}.json`, {
-    next: { revalidate: false, tags: ["master"] },
+  const url = `${REGIONS[region].masterBase}/${file}.json`;
+  const hit = loadMemo.get(url);
+  if (hit && Date.now() - hit.at < LOAD_TTL_MS) return hit.value as Promise<T>;
+  const value = (async () => {
+    // 시간으로 만료시키지 않고, 오후 3시·8시 갱신(app/api/revalidate) 때만 새로 받음
+    const res = await fetchWithRetry(url, { next: { revalidate: false, tags: ["master"] } });
+    if (!res.ok) throw new Error(`${file}.json 불러오기 실패 (${res.status})`);
+    return res.json() as Promise<T>;
+  })().catch((e) => {
+    loadMemo.delete(url);
+    throw e;
   });
-  if (!res.ok) throw new Error(`${file}.json 불러오기 실패 (${res.status})`);
-  return res.json() as Promise<T>;
+  loadMemo.set(url, { at: Date.now(), value });
+  return value;
 }
 
 /** 진행 중인 이벤트, 없으면 가장 최근에 시작한 이벤트 */

@@ -17,6 +17,7 @@ import {
   type UserCard,
 } from "sekai-calculator";
 import { clampCharacterRank, clampSkill, emptyGrowth, type Growth, type OwnedCard } from "./presets";
+import { fetchWithRetry } from "./fetchRetry";
 import { REGIONS, type Region } from "./region";
 
 // ---------- 종합력 계산 보정 ----------
@@ -130,7 +131,9 @@ export function getMasterFile<T>(key: string, region: Region = "kr"): Promise<T[
   return cached(`master:${region}:${key}`, async () => {
     // 화면을 정적으로 만들 수 있게 no-store 대신 태그 캐시 사용 (오후 3시·8시 갱신 때 함께 비워짐).
     // 2MB가 넘는 파일은 Next가 저장하지 않지만 위의 메모리 캐시로 충분함
-    const res = await fetch(`${REGIONS[region].masterBase}/${key}.json`, { next: { revalidate: false, tags: ["master"] } });
+    const res = await fetchWithRetry(`${REGIONS[region].masterBase}/${key}.json`, {
+      next: { revalidate: false, tags: ["master"] },
+    });
     // 한국판에 아직 없는 파일(신규 시스템 등)은 빈 배열로 처리
     if (res.status === 404) return [] as T[];
     if (!res.ok) throw new Error(`${key}.json 불러오기 실패 (${res.status})`);
@@ -142,7 +145,7 @@ export function getMasterFile<T>(key: string, region: Region = "kr"): Promise<T[
 export async function getMusicMetas(): Promise<MusicMeta[] | null> {
   try {
     return await cached("musicMetas", async () => {
-      const res = await fetch(MUSIC_META_URL, { next: { revalidate: false, tags: ["master"] } });
+      const res = await fetchWithRetry(MUSIC_META_URL, { next: { revalidate: false, tags: ["master"] } });
       if (!res.ok) throw new Error(`music_metas ${res.status}`);
       return (await res.json()) as MusicMeta[];
     });
@@ -170,6 +173,10 @@ export interface RecommendInput {
   fixedCardIds?: number[];
   /** 리더 자리에 고정할 카드 (fixedCardIds 중 하나) */
   fixedLeaderId?: number | null;
+  /** 꼭 넣을 캐릭터 (카드는 그 캐릭터 카드 중 가장 좋은 것으로 고름) */
+  fixedCharacterIds?: number[];
+  /** 리더로 고정할 캐릭터 */
+  fixedLeaderCharacterId?: number | null;
   /** 서버 (없으면 한국 서버) */
   region?: Region;
 }
@@ -356,9 +363,29 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
   }
   const fixedLeader = input.fixedLeaderId && fixedIds.includes(Number(input.fixedLeaderId)) ? Number(input.fixedLeaderId) : null;
 
+  // 고정 캐릭터 확인 (카드를 고정한 캐릭터는 빼고, 리더 캐릭터는 고정 캐릭터에 포함)
+  const ownedChars = new Set(userCards.map((c) => characterOf.get(c.cardId)));
+  const fixedCharIds = Array.from(new Set((input.fixedCharacterIds ?? []).map(Number))).filter(
+    (ch) => ownedChars.has(ch) && !fixedChars.includes(ch),
+  );
+  const leaderChar =
+    fixedLeader === null && input.fixedLeaderCharacterId && ownedChars.has(Number(input.fixedLeaderCharacterId))
+      ? Number(input.fixedLeaderCharacterId)
+      : null;
+  if (leaderChar !== null && fixedChars.includes(leaderChar)) {
+    throw new RecommendError("리더로 고정한 캐릭터의 카드를 이미 고정했어요. 그 카드를 리더로 고정해 주세요.");
+  }
+  if (leaderChar !== null && !fixedCharIds.includes(leaderChar)) fixedCharIds.push(leaderChar);
+  if (fixedIds.length + fixedCharIds.length > 5) throw new RecommendError("카드와 캐릭터를 합쳐 5개까지 고정할 수 있어요.");
+
   const decks =
-    fixedIds.length > 0
-      ? await recommendWithFixed(provider, input.eventId, liveType, musicMeta, userCards, fixedIds, fixedLeader, characterOf)
+    fixedIds.length > 0 || fixedCharIds.length > 0
+      ? await recommendWithFixed(provider, input.eventId, liveType, musicMeta, userCards, characterOf, {
+          cards: fixedIds,
+          leader: fixedLeader,
+          characters: fixedCharIds,
+          leaderCharacter: leaderChar,
+        })
       : await recommendFree(provider, input.eventId, liveType, musicMeta);
 
   return {
@@ -427,10 +454,23 @@ async function recommendFree(provider: DataProvider, eventId: number, liveType: 
   return withFewerOnFailure((limit) => recommender.recommendEventDeck(eventId, liveType, { musicMeta, limit }));
 }
 
+/** 고정 조건: 꼭 넣을 카드, 리더 카드, 꼭 넣을 캐릭터, 리더 캐릭터 */
+interface FixedSpec {
+  cards: number[];
+  leader: number | null;
+  characters: number[];
+  leaderCharacter: number | null;
+}
+
+/** 고정 캐릭터마다 시험해 볼 카드 조합 수 상한 (넘으면 캐릭터별 후보를 종합력 높은 순으로 줄임) */
+const MAX_CHARACTER_COMBOS = 60;
+
 /**
- * 고정 카드를 반드시 넣은 덱.
- * 나머지 자리만 라이브러리의 덱 탐색으로 고르되, 점수는 언제나 "고정 카드 + 고른 카드" 5장 덱으로 매긴다.
- * 리더를 고정하면 그 카드를 첫 자리에, 아니면 라이브러리처럼 스킬이 가장 센 카드를 리더로 둔다.
+ * 고정 카드·캐릭터를 반드시 넣은 덱.
+ * 캐릭터를 고정하면 그 캐릭터의 보유 카드를 하나씩 넣어 보며(다른 카드보다 모든 면에서 약한 카드는 제외),
+ * 각 경우마다 나머지 자리를 라이브러리의 덱 탐색으로 채운 뒤 가장 좋은 덱을 고른다.
+ * 점수는 언제나 "고정 카드 + 고른 카드" 5장 덱으로 매긴다.
+ * 리더를 고정하면 그 카드(또는 그 캐릭터로 고른 카드)를 첫 자리에, 아니면 스킬이 가장 센 카드를 리더로 둔다.
  */
 async function recommendWithFixed(
   provider: DataProvider,
@@ -438,9 +478,8 @@ async function recommendWithFixed(
   liveType: LiveType,
   musicMeta: MusicMeta,
   userCards: UserCard[],
-  fixedIds: number[],
-  fixedLeader: number | null,
   characterOf: Map<number, number>,
+  spec: FixedSpec,
 ): Promise<ScoredDeck[]> {
   const eventConfig = await new EventService(provider).getEventConfig(eventId);
   if (eventConfig.eventType === undefined) throw new RecommendError("이벤트 종류를 알 수 없어요.");
@@ -449,11 +488,12 @@ async function recommendWithFixed(
   const areaItemLevels = await new AreaItemService(provider).getAreaItemLevels();
   const allDetails = await new CardCalculator(provider).batchGetCardDetail(userCards, {}, eventConfig, areaItemLevels);
   const detailById = new Map(allDetails.map((c) => [c.cardId, c]));
+  const base = new BaseDeckRecommend(provider);
 
   /** 카드 5장으로 덱 상세와 이벤트 포인트 계산 (리더 자리 정리 포함) */
-  const evaluate = (ids: number[]): ScoredDeck => {
+  const evaluate = (ids: number[], leader: number | null): ScoredDeck => {
     let order = [...ids];
-    if (fixedLeader !== null) order = [fixedLeader, ...order.filter((id) => id !== fixedLeader)];
+    if (leader !== null) order = [leader, ...order.filter((id) => id !== leader)];
     const detailOf = (list: number[]) =>
       DeckCalculator.getDeckDetailByCards(
         list.map((id) => detailById.get(id)!),
@@ -463,7 +503,7 @@ async function recommendWithFixed(
         eventConfig.worldBloomDifferentAttributeBonuses,
       );
     let deck = detailOf(order);
-    if (fixedLeader === null) {
+    if (leader === null) {
       // 스킬 효과가 가장 큰 카드를 리더로
       let best = 0;
       deck.cards.forEach((c, i) => {
@@ -478,38 +518,76 @@ async function recommendWithFixed(
     return Object.assign(deck, { score: pointOf(musicMeta, deck) });
   };
 
-  const rest = 5 - fixedIds.length;
-  if (rest === 0) return [evaluate(fixedIds)];
+  /** 정해진 카드들을 넣고 나머지 자리를 채운 덱 (좋은 순) */
+  const searchWith = async (fixedIds: number[], leader: number | null): Promise<ScoredDeck[]> => {
+    const rest = 5 - fixedIds.length;
+    if (rest === 0) return [evaluate(fixedIds, leader)];
+    // 나머지 자리 후보: 고정 카드·고정 캐릭터의 카드는 뺌
+    const blocked = new Set([...fixedIds.map((id) => characterOf.get(id)), ...spec.characters]);
+    const pool = userCards.filter((c) => !blocked.has(characterOf.get(c.cardId)!));
+    const poolChars = new Set(pool.map((c) => characterOf.get(c.cardId))).size;
+    if (poolChars < rest) {
+      throw new RecommendError(`고정한 카드·캐릭터 말고 다른 캐릭터의 카드가 ${rest}명 더 필요해요. 지금은 ${poolChars}명이에요.`);
+    }
+    const partial = await withFewerOnFailure((limit) =>
+      base.recommendHighScoreDeck(
+        pool,
+        (_meta, partialDeck) => evaluate([...fixedIds, ...partialDeck.cards.map((c) => c.cardId)], leader).score,
+        { musicMeta, limit, member: rest },
+        liveType,
+        eventConfig,
+      ),
+    );
+    return partial.map((p) => evaluate([...fixedIds, ...p.cards.map((c) => c.cardId)], leader));
+  };
 
-  // 나머지 자리 후보: 고정 카드와 그 캐릭터의 다른 카드는 뺌
-  const fixedChars = new Set(fixedIds.map((id) => characterOf.get(id)));
-  const pool = userCards.filter((c) => !fixedIds.includes(c.cardId) && !fixedChars.has(characterOf.get(c.cardId)!));
-  const pool5Chars = new Set(pool.map((c) => characterOf.get(c.cardId))).size;
-  if (pool5Chars < rest) {
-    throw new RecommendError(`고정 카드 말고 다른 캐릭터의 카드가 ${rest}명 더 필요해요. 지금은 ${pool5Chars}명이에요.`);
+  // 고정 캐릭터별 후보 카드: 같은 캐릭터의 다른 카드보다 모든 면에서 약한 카드는 뺌
+  const candidates = spec.characters.map((ch) => {
+    const own = allDetails.filter((d) => d.characterId === ch);
+    const kept = own.filter(
+      (a, i) => !own.some((b, j) => j !== i && CardCalculator.isCertainlyLessThan(a, b) && !(CardCalculator.isCertainlyLessThan(b, a) && j > i)),
+    );
+    return (kept.length ? kept : own).map((d) => d.cardId);
+  });
+  // 조합이 너무 많으면 캐릭터별 후보를 종합력이 높은 순으로 줄임
+  const totalCombos = candidates.reduce((n, list) => n * list.length, 1);
+  if (totalCombos > MAX_CHARACTER_COMBOS) {
+    const per = Math.max(1, Math.floor(Math.pow(MAX_CHARACTER_COMBOS, 1 / candidates.length)));
+    const powerOf = (id: number) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = detailById.get(id)!.power as any;
+      return Number(p.max ?? 0);
+    };
+    candidates.forEach((list, i) => {
+      candidates[i] = [...list].sort((a, b) => powerOf(b) - powerOf(a)).slice(0, per);
+    });
   }
 
-  const base = new BaseDeckRecommend(provider);
-  const partial = await withFewerOnFailure((limit) =>
-    base.recommendHighScoreDeck(
-      pool,
-      (_meta, partialDeck) => evaluate([...fixedIds, ...partialDeck.cards.map((c) => c.cardId)]).score,
-      { musicMeta, limit, member: rest },
-      liveType,
-      eventConfig,
-    ),
-  );
-  // 라이브러리가 고른 나머지 카드로 5장 덱을 다시 계산하고, 같은 조합은 하나로
+  // 후보 카드 조합마다 덱을 찾고, 전체에서 좋은 순으로 3개
+  let combos: number[][] = [[]];
+  for (const list of candidates) combos = combos.flatMap((c) => list.map((id) => [...c, id]));
+  const leaderIndex = spec.leaderCharacter === null ? -1 : spec.characters.indexOf(spec.leaderCharacter);
+  const found: ScoredDeck[] = [];
+  let lastError: unknown = null;
+  for (const combo of combos) {
+    const leader = spec.leader ?? (leaderIndex >= 0 ? combo[leaderIndex] : null);
+    try {
+      found.push(...(await searchWith([...spec.cards, ...combo], leader)));
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (found.length === 0) throw lastError ?? new RecommendError("조건에 맞는 덱을 찾지 못했어요.");
   const seen = new Set<string>();
-  return partial
-    .map((p) => evaluate([...fixedIds, ...p.cards.map((c) => c.cardId)]))
+  return found
+    .sort((a, b) => b.score - a.score)
     .filter((d) => {
-      const key = d.cards.map((c) => c.cardId).sort((a, b) => a - b).join(",");
+      const key = d.cards.map((c) => c.cardId).join(",");
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     })
-    .sort((a, b) => b.score - a.score);
+    .slice(0, 3);
 }
 
 /**
