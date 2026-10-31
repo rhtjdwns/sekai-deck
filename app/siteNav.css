@@ -1,0 +1,39 @@
+/* ---------- 상단 메뉴: 서버 전환 ---------- */
+.region-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.region-switch a {
+  padding: 4px 10px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+}
+.region-switch a + a {
+  border-left: 1px solid var(--line);
+}
+.region-switch a[aria-current="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  .sitebar-inner {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .sitebar nav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+  }
+  .region-switch {
+    margin-left: auto;
+  }
+}

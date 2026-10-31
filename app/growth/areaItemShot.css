@@ -1,0 +1,135 @@
+/* ---------- 에어리어 아이템 스크린샷 입력 ---------- */
+.ai-shot {
+  margin-top: 28px;
+  padding: 12px 18px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.ai-shot-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+}
+.ai-shot-toggle::before {
+  content: "▸ ";
+}
+.ai-shot-toggle[aria-expanded="true"]::before {
+  content: "▾ ";
+}
+.ai-shot-body .hint {
+  margin: 10px 0 0;
+}
+.ai-warn {
+  color: #d23b55;
+}
+.ai-guide {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--happy);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.ai-guide-title {
+  margin: 0;
+  font-weight: 700;
+}
+.ai-guide ol {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.ai-guide-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.ai-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ai-actions button {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.ai-actions .primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+.ai-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ai-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 8px 14px;
+}
+.ai-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ai-row.unsure {
+  border-color: var(--happy);
+}
+.ai-row.excluded {
+  opacity: 0.5;
+}
+.ai-preview {
+  flex: 0 0 auto;
+  width: 56px;
+  height: auto;
+  border-radius: 6px;
+}
+.ai-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.ai-fields select {
+  height: 30px;
+  max-width: 100%;
+  font-size: 13px;
+}
+.ai-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ai-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--happy);
+  font-size: 11px;
+  font-weight: 700;
+}
+.ai-diff {
+  font-size: 12px;
+  color: var(--focus);
+  font-variant-numeric: tabular-nums;
+}

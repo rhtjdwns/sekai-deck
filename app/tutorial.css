@@ -1,0 +1,145 @@
+/* ---------- 따라하기 튜토리얼 ---------- */
+.tour-ring {
+  position: fixed;
+  z-index: 60;
+  border-radius: 12px;
+  border: 3px solid var(--focus);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 25%, transparent);
+  pointer-events: none;
+  animation: tour-pulse 1.4s ease-in-out infinite;
+  transition: top 0.15s, left 0.15s, width 0.15s, height 0.15s;
+}
+@keyframes tour-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--focus) 8%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-ring {
+    animation: none;
+  }
+}
+.tour-card {
+  position: fixed;
+  z-index: 70;
+  right: 20px;
+  bottom: 20px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgba(20, 16, 50, 0.22);
+}
+.tour-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tour-step {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--focus);
+}
+.tour-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tour-close:hover {
+  background: var(--paper);
+}
+.tour-dots {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+}
+.tour-dots li {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.tour-dots li.done {
+  background: color-mix(in srgb, var(--focus) 45%, transparent);
+}
+.tour-dots li.now {
+  background: var(--focus);
+}
+.tour-title {
+  margin: 10px 0 0;
+  font-size: 17px;
+  line-height: 1.4;
+}
+.tour-body {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.tour-progress {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.tour-progress strong {
+  color: var(--focus);
+  font-variant-numeric: tabular-nums;
+}
+.tour-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tour-next,
+.tour-skip {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.tour-next {
+  border: 0;
+  background: var(--focus);
+  color: #fff;
+  font-weight: 700;
+}
+.tour-skip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+}
+.tour-start {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--focus);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--focus);
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 520px) {
+  .tour-card {
+    right: 16px;
+    left: 16px;
+    bottom: 16px;
+    width: auto;
+  }
+}

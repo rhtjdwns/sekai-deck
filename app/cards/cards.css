@@ -1,0 +1,285 @@
+/* ---------- 캐릭터 랭크 ---------- */
+.ranks {
+  margin-top: 12px;
+  padding: 12px 18px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.ranks summary {
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+.ranks-count {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.ranks .hint {
+  margin: 10px 0 0;
+}
+.ranks-units {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px 20px;
+}
+.ranks-unit {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ranks-unit legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+  border-left: 4px solid var(--char);
+}
+.rank-name {
+  flex: 1;
+  font-size: 14px;
+}
+.rank-row input {
+  width: 72px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  text-align: right;
+}
+
+/* ---------- 체크 모드 보조 ---------- */
+.owned-detail {
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.bulk-skill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.bulk-skill select {
+  height: 38px;
+}
+.mini-story {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mini-story > span {
+  color: var(--muted);
+}
+
+/* ---------- 스크린샷으로 추가 ---------- */
+.shot {
+  margin-top: 12px;
+  padding: 12px 18px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.shot-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+.shot-toggle::before {
+  content: "▸ ";
+}
+.shot-toggle[aria-expanded="true"]::before {
+  content: "▾ ";
+}
+.shot-body .hint {
+  margin: 10px 0 0;
+}
+.shot-body .hint.warn {
+  color: #d23b55;
+}
+.shot-actions {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shot-actions button {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.shot-actions .primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+.shot-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.shot-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 8px 16px;
+}
+.shot-row {
+  display: grid;
+  grid-template-columns: 56px auto 56px minmax(0, 1fr);
+  grid-template-areas: "tile arrow card info" "tile arrow card detail";
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.shot-row.unsure {
+  border-color: var(--happy);
+}
+.shot-row.excluded {
+  opacity: 0.5;
+}
+.shot-tile {
+  grid-area: tile;
+  border-radius: 6px;
+}
+.shot-arrow {
+  grid-area: arrow;
+  color: var(--muted);
+}
+.shot-card {
+  grid-area: card;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  border-top: 3px solid var(--attr, var(--line));
+  object-fit: cover;
+}
+.shot-card.empty {
+  background: var(--paper);
+}
+.shot-info {
+  grid-area: info;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.shot-info select {
+  height: 30px;
+  max-width: 100%;
+  font-size: 13px;
+}
+.shot-badge {
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--happy);
+  font-size: 11px;
+  font-weight: 700;
+}
+.shot-owned {
+  font-size: 11px;
+  color: var(--muted);
+}
+.shot-detail {
+  grid-area: detail;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+@media (max-width: 520px) {
+  .shot-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- 스크린샷 캡처 안내 ---------- */
+.shot-guide {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--happy);
+  border-left-width: 4px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+.shot-guide-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+.shot-guide-body {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-start;
+}
+.shot-guide-steps {
+  flex: 1 1 320px;
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.shot-guide-demo {
+  flex: 0 0 auto;
+  width: 160px;
+  font-size: 13px;
+  text-align: center;
+}
+.shot-guide-sortbtn {
+  display: block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-weight: 700;
+}
+.shot-guide-demo ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.shot-guide-demo li {
+  padding: 3px 0;
+  color: var(--muted);
+}
+.shot-guide-demo li.on {
+  margin: 0 6px;
+  border-radius: 6px;
+  background: var(--focus);
+  color: #fff;
+  font-weight: 700;
+}
+.shot-guide-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}

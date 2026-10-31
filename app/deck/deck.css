@@ -1,0 +1,438 @@
+/* ---------- 덱 추천 ---------- */
+.deck-options {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  align-items: flex-end;
+}
+.deck-options .num {
+  height: 38px;
+  width: 90px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.run {
+  height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  cursor: pointer;
+}
+.run:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.deck-options + .hint {
+  margin-top: 14px;
+}
+.notice.error {
+  border-color: #d23b55;
+}
+.result {
+  margin-top: 28px;
+}
+.result-head h2 {
+  margin: 0;
+  font-size: 22px;
+}
+.stats {
+  margin: 16px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  align-items: flex-end;
+}
+.stats div {
+  display: flex;
+  flex-direction: column;
+}
+.stats dt {
+  font-size: 13px;
+  color: var(--muted);
+}
+.stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.stats .stat-main dd {
+  font-size: 40px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.deck-cards {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.deck-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--attr);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.deck-card img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  margin-bottom: 6px;
+}
+.deck-card > span:not(.leader) {
+  padding: 0 10px;
+}
+.deck-card-name {
+  font-weight: 700;
+}
+.deck-card-title {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-card-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.leader {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 700;
+}
+.others {
+  margin-top: 18px;
+}
+.others summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.assume {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 75ch;
+}
+@media (max-width: 720px) {
+  .deck-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .stats .stat-main {
+    width: 100%;
+  }
+}
+
+/* ---------- 이벤트 선택 ---------- */
+.event-picker {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.event-picker > .seg {
+  align-self: flex-start;
+}
+.event-picker .seg button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tab-count {
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.event-select {
+  max-width: 640px;
+}
+.event-select select {
+  width: 100%;
+}
+.picked-event {
+  margin-top: 0;
+}
+.status {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+}
+.status-current {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.status-future {
+  color: var(--focus);
+  border-color: var(--focus);
+}
+.computed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.computed button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 280px;
+}
+.computed button[aria-pressed="true"] {
+  border-color: var(--ink);
+}
+.computed small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 다른 후보 덱 ---------- */
+.alt-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.alt {
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.alt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+.alt-rank {
+  font-weight: 700;
+}
+.alt-ep {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.alt-ep small {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.alt-meta {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.alt-cards {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 96px));
+  gap: 8px;
+}
+.alt-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--attr);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--paper);
+}
+.alt-card img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+.alt-card .leader {
+  top: 4px;
+  left: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+.alt-card-name {
+  padding: 4px 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alt-card-meta {
+  padding: 0 6px 6px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .alt-cards {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .alt-card-meta {
+    display: none;
+  }
+}
+
+/* ---------- 곡 안내 ---------- */
+.hint.warn-song {
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--happy);
+  background: var(--surface);
+  border-radius: 6px;
+  color: var(--ink);
+}
+.warn-song p {
+  margin: 0;
+}
+.song-length {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.song-length input {
+  width: 90px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  text-align: right;
+}
+.est-badge {
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--happy);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---------- 종합력 계산 보기 ---------- */
+.power {
+  margin-top: 14px;
+}
+.power-toggle {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+.power-toggle[aria-expanded="true"] {
+  border-color: var(--ink);
+}
+.power-scroll {
+  margin-top: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.power-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.power-table caption {
+  padding: 10px 12px 4px;
+  text-align: left;
+  font-weight: 700;
+}
+.power-table th,
+.power-table td {
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+.power-table thead th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+}
+.power-table th[scope="row"] {
+  text-align: left;
+  font-weight: 500;
+}
+.power-table th[scope="row"] small {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.power-table td small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.power-table tfoot th,
+.power-table tfoot td {
+  border-top: 2px solid var(--ink);
+  font-weight: 700;
+}
+.power-sum {
+  font-weight: 700;
+}
+.power-leader {
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+}
+.power-note {
+  margin-top: 8px;
+}

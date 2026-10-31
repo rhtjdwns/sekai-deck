@@ -1,0 +1,12 @@
+/* 메인 화면: 선택지 3개 */
+.choices {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 960px) {
+  .choices {
+    grid-template-columns: 1fr;
+  }
+}
+.home-head .tour-start {
+  margin-top: 12px;
+}
