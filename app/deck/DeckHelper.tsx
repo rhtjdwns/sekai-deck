@@ -13,7 +13,7 @@ import "./fixedCards.css";
 
 /** 공방 랜덤 곡 (서버의 RANDOM_MUSIC_ID와 같은 값) */
 const RANDOM_SONG = -1;
-/** 계산 응답을 기다리는 최대 시간. 서버는 40초 안에 끝내거나 안내를 보냄 */
+/** 계산 응답을 기다리는 최대 시간. 서버는 보통 몇 초 안에 끝나지만, 네트워크 문제로 응답이 없을 때를 대비 */
 const REQUEST_TIMEOUT_MS = 100_000;
 
 const RARITY_LABEL: Record<Rarity, string> = {
@@ -66,6 +66,16 @@ function formatTime(sec: number) {
   const s = Math.round(sec);
   return s >= 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${s}초`;
 }
+
+/** 실효 스킬(실스업): 리더 스킬 효과 + 나머지 4명 스킬 효과 합 × 0.2 (덱의 첫 카드가 리더) */
+function effectiveSkill(deck: RecommendResult["decks"][number]) {
+  const [leader, ...rest] = deck.cards;
+  if (!leader) return 0;
+  return leader.skillScoreUp + rest.reduce((sum, c) => sum + c.skillScoreUp, 0) * 0.2;
+}
+/** 256.0 → "256", 255.6 → "255.6" */
+const fmtSkill = (n: number) => n.toFixed(1).replace(/\.0$/, "");
+
 type Saved = {
   result: RecommendResult;
   presetName: string;
@@ -249,7 +259,7 @@ export default function DeckHelper({
       setErrors((s) => ({
         ...s,
         [id]: timedOut
-          ? "계산이 너무 오래 걸려서 기다리기를 멈췄어요. 꼭 넣을 카드나 캐릭터를 몇 개 고정하면 훨씬 빨라져요. 잠시 후 다시 시도해 주세요."
+          ? "서버 응답이 너무 오래 걸려서 기다리기를 멈췄어요. 잠시 후 다시 시도해 주세요."
           : err.message,
       }));
     } finally {
@@ -439,12 +449,6 @@ export default function DeckHelper({
               {chapters.length > 0 && (
                 <p className="hint">
                   월드 링크는 챕터마다 보너스 캐릭터와 서포트 덱이 달라서, 고른 챕터 기준으로 계산해요.
-                </p>
-              )}
-              {event.finale && (
-                <p className="hint warn-song">
-                  월드 링크 파이널은 확인할 카드 조합이 아주 많아서 계산이 오래 걸릴 수 있어요. 40초 안에 끝나지 않으면 안내가
-                  나오니, 그때는 꼭 넣을 카드나 캐릭터를 몇 개 고정해 주세요.
                 </p>
               )}
 
@@ -746,6 +750,10 @@ function Results({
           <dt>종합력</dt>
           <dd>{fmt(best.power)}</dd>
         </div>
+        <div title="리더 스킬 효과 + 나머지 4명 스킬 효과 합 × 0.2">
+          <dt>실효 스킬</dt>
+          <dd>{fmtSkill(effectiveSkill(best))}%</dd>
+        </div>
         <div>
           <dt>예상 점수</dt>
           <dd>{fmt(best.liveScore)}</dd>
@@ -802,7 +810,8 @@ function Results({
                     {fmt(d.eventPoint)}pt <small>({fmt(d.eventPoint - best.eventPoint)})</small>
                   </span>
                   <span className="alt-meta">
-                    보너스 +{d.eventBonus.toFixed(1).replace(/\.0$/, "")}%, 종합력 {fmt(d.power)}
+                    보너스 +{d.eventBonus.toFixed(1).replace(/\.0$/, "")}%, 종합력 {fmt(d.power)}, 실효 스킬{" "}
+                    {fmtSkill(effectiveSkill(d))}%
                   </span>
                 </div>
                 <ol className="alt-cards">
@@ -835,7 +844,8 @@ function Results({
       )}
 
       <p className="assume">
-        라이브 보너스(에너지) 미사용, 카드 레벨 최대 기준입니다.
+        라이브 보너스(에너지) 미사용, 카드 레벨 최대 기준입니다. 실효 스킬은 리더 스킬 효과에 나머지 4명 스킬 효과 합의
+        0.2배를 더한 값이에요.
         {result.liveType === "multi" && " 멀티는 다른 4명이 나와 같은 점수를 낸다고 가정합니다."}
         {result.metaSource === "estimated" &&
           ` 이 곡은 곡 데이터가 없어 길이가 비슷한 곡들로 점수를 추정했어요(곡 길이 ${formatTime(result.musicTime)}${

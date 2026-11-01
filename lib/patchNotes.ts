@@ -7,6 +7,14 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: "2.1",
+    title: "실효 스킬 표시",
+    items: [
+      "덱 결과에 실효 스킬(실스업)을 함께 보여 줘요. 리더 스킬 효과 + 나머지 4명 스킬 효과 합 × 0.2로 계산해요.",
+      "최적 덱은 예상 점수 옆에, 다른 후보 덱은 보너스·종합력 옆에 표시돼요.",
+    ],
+  },
+  {
     version: "2.0",
     title: "덱 계산 속도 개선",
     items: [
