@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EventOption, EventStatus } from "@/lib/events";
 import type { Attr, CardView, MasterSnapshot, Rarity } from "@/lib/master";
 import type { LiveKind, RecommendResult } from "@/lib/recommend";
@@ -10,11 +10,14 @@ import { REGIONS, regionHref, regionOfPath } from "@/lib/region";
 import type { SongOption } from "@/lib/songs";
 import { usePresets } from "../usePresets";
 import "./fixedCards.css";
+import "./teammates.css";
 
 /** 공방 랜덤 곡 (서버의 RANDOM_MUSIC_ID와 같은 값) */
 const RANDOM_SONG = -1;
 /** 계산 응답을 기다리는 최대 시간. 서버는 보통 몇 초 안에 끝나지만, 네트워크 문제로 응답이 없을 때를 대비 */
 const REQUEST_TIMEOUT_MS = 100_000;
+/** 멀티 라이브 팀원 입력을 이 브라우저에 저장하는 이름 */
+const TEAM_KEY = "sekai-deck-kr:teammates";
 
 const RARITY_LABEL: Record<Rarity, string> = {
   rarity_4: "★4",
@@ -60,6 +63,9 @@ const shortDate = new Intl.DateTimeFormat("ko-KR", {
 });
 
 type Songs = { efficient: SongOption[]; all: SongOption[] };
+/** 팀원 입력 칸 (입력 중인 글자 그대로) */
+type TeamInput = { power: string; skill: string };
+const emptyTeam = (): TeamInput[] => Array.from({ length: 4 }, () => ({ power: "", skill: "" }));
 
 /** 146 → "2분 26초" */
 function formatTime(sec: number) {
@@ -140,6 +146,34 @@ export default function DeckHelper({
   const [fixedLeaderChar, setFixedLeaderChar] = useState<number | null>(null);
   // 월드 링크: 이벤트별로 고른 챕터 캐릭터
   const [chapterByEvent, setChapterByEvent] = useState<Record<number, number>>({});
+  // 멀티 라이브 팀원 4명 (비워 두면 내 덱과 같다고 봄). 이 브라우저에 저장
+  const [team, setTeam] = useState<TeamInput[]>(emptyTeam);
+  const [teamLoaded, setTeamLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TEAM_KEY);
+      const parsed = raw ? (JSON.parse(raw) as TeamInput[]) : null;
+      if (Array.isArray(parsed) && parsed.length === 4) {
+        setTeam(parsed.map((t) => ({ power: String(t?.power ?? ""), skill: String(t?.skill ?? "") })));
+      }
+    } catch {
+      // 저장소를 못 쓰면 빈 칸으로
+    }
+    setTeamLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!teamLoaded) return;
+    try {
+      localStorage.setItem(TEAM_KEY, JSON.stringify(team));
+    } catch {
+      // 무시
+    }
+  }, [team, teamLoaded]);
+  const teammates = team
+    .map((t) => ({ power: Number(t.power.replace(/,/g, "")), skill: Number(t.skill || 0) }))
+    .filter((t) => Number.isFinite(t.power) && t.power > 0 && Number.isFinite(t.skill) && t.skill >= 0);
+  const setTeamField = (i: number, key: keyof TeamInput, value: string) =>
+    setTeam((list) => list.map((t, j) => (j === i ? { ...t, [key]: value } : t)));
 
   const event = eventId !== undefined ? eventById.get(eventId) : undefined;
   const isCheerful = event?.eventType === "cheerful_carnival";
@@ -234,6 +268,8 @@ export default function DeckHelper({
           fixedCharacterIds: charsOwned,
           fixedLeaderCharacterId: leaderCharOwned,
           worldBloomCharacterId: chapterChar ?? null,
+          // 팀원 정보는 멀티(치어풀) 라이브에서만 보냄
+          teammates: liveType === "multi" ? teammates : [],
           region,
         }),
         // 응답이 오지 않으면 무한히 기다리지 않도록
@@ -450,6 +486,55 @@ export default function DeckHelper({
                 <p className="hint">
                   월드 링크는 챕터마다 보너스 캐릭터와 서포트 덱이 달라서, 고른 챕터 기준으로 계산해요.
                 </p>
+              )}
+
+              {liveType === "multi" && (
+                <details className="team" open={teammates.length > 0}>
+                  <summary>
+                    팀원 정보 ({isCheerful ? "치어풀" : "멀티"} 라이브)
+                    <span className="team-count">
+                      {teammates.length > 0 ? `${teammates.length}명 입력됨` : "입력하지 않으면 5명 모두 내 덱과 같다고 계산"}
+                    </span>
+                  </summary>
+                  <p className="hint">
+                    함께 라이브할 팀원 4명의 종합력과 실효 스킬(리더 스킬 + 나머지 4명 스킬 합 × 0.2)을 넣으면, 팀원 스킬과 종합력
+                    합에 따른 점수 변화를 반영해 최적 덱을 찾아요. 비워 둔 팀원은 내 덱과 같은 값으로 계산해요. 입력한 값은 이
+                    브라우저에 저장돼요.
+                  </p>
+                  <div className="team-grid">
+                    {team.map((t, i) => (
+                      <fieldset key={i} className="team-row">
+                        <legend>팀원 {i + 1}</legend>
+                        <label>
+                          종합력
+                          <input
+                            className="team-power"
+                            inputMode="numeric"
+                            placeholder="예: 250000"
+                            value={t.power}
+                            onChange={(e) => setTeamField(i, "power", e.target.value.replace(/[^\d,]/g, ""))}
+                          />
+                        </label>
+                        <label>
+                          실효 스킬
+                          <input
+                            className="team-skill"
+                            inputMode="decimal"
+                            placeholder="예: 200"
+                            value={t.skill}
+                            onChange={(e) => setTeamField(i, "skill", e.target.value.replace(/[^\d.]/g, ""))}
+                          />
+                          %
+                        </label>
+                      </fieldset>
+                    ))}
+                  </div>
+                  <div className="team-actions">
+                    <button type="button" onClick={() => setTeam(emptyTeam())}>
+                      팀원 정보 비우기
+                    </button>
+                  </div>
+                </details>
               )}
 
               <section className="fixed-cards" aria-label="고정할 카드">
@@ -707,6 +792,8 @@ function Results({
   const [best, ...others] = result.decks;
   if (!best) return <p className="hint">조건에 맞는 덱을 찾지 못했습니다.</p>;
   const fmt = (n: number) => Math.round(n).toLocaleString();
+  const isTeamLive = result.liveType === "multi" || result.liveType === "cheerful";
+  const teamUsed = result.teammatesUsed ?? 0;
 
   return (
     <section className="result" aria-labelledby="best-deck">
@@ -716,6 +803,7 @@ function Results({
           {songTitle.get(result.musicId) ?? `곡 ${result.musicId}`} {result.difficulty.toUpperCase()},{" "}
           {RESULT_LIVE_LABEL[result.liveType]} 1회 기준, &quot;{saved.presetName}&quot; 프리셋
           {result.worldBloomCharacterId !== undefined && `, ${charName.get(result.worldBloomCharacterId)} 챕터`}
+          {isTeamLive && teamUsed > 0 && `, 팀원 ${teamUsed}명 입력값 반영`}
           {result.metaSource === "estimated" && <span className="est-badge">추정</span>}
           {result.metaSource === "average" && <span className="est-badge">평균</span>}
         </p>
@@ -846,7 +934,10 @@ function Results({
       <p className="assume">
         라이브 보너스(에너지) 미사용, 카드 레벨 최대 기준입니다. 실효 스킬은 리더 스킬 효과에 나머지 4명 스킬 효과 합의
         0.2배를 더한 값이에요.
-        {result.liveType === "multi" && " 멀티는 다른 4명이 나와 같은 점수를 낸다고 가정합니다."}
+        {isTeamLive &&
+          (teamUsed > 0
+            ? ` 팀원 ${teamUsed}명은 입력한 종합력·실효 스킬로${teamUsed < 4 ? ", 나머지 팀원은 내 덱과 같다고" : ""} 계산했어요. 1~5번째 스킬은 5명이 한 번씩 순서 무작위로(평균), 6번째 스킬은 실효 스킬이 가장 높은 사람 것으로 봐요.`
+            : " 팀원은 입력하지 않아서 다른 4명이 나와 같은 덱으로 같은 점수를 낸다고 가정했어요.")}
         {result.metaSource === "estimated" &&
           ` 이 곡은 곡 데이터가 없어 길이가 비슷한 곡들로 점수를 추정했어요(곡 길이 ${formatTime(result.musicTime)}${
             result.musicTimeSource === "estimated" ? ", 노트 수로 추정" : result.musicTimeSource === "input" ? ", 입력값" : ""

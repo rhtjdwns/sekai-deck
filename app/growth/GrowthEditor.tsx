@@ -80,6 +80,27 @@ export default function GrowthEditor({
   const honorTotal = master.honors.reduce((sum, h) => sum + honorBonus(h), 0);
   const charName = (id: number) => characters.find((c) => c.id === id)?.name ?? "";
 
+  /** 캐릭터 랭크·에어리어 아이템·게이트·칭호를 모두 최대로 (마이세카이 인형 보너스는 값이 정해져 있지 않아 그대로) */
+  const maxAll = () => {
+    if (
+      !confirm(
+        `"${active.name}" 프리셋의 캐릭터 랭크, 에어리어 아이템, 마이세카이 게이트, 칭호를 모두 최대로 채울까요? 마이세카이 인형 보너스는 그대로 둬요.`,
+      )
+    )
+      return;
+    for (const c of characters) setCharacterRank(c.id, master.maxCharacterRank);
+    updateGrowth((g) => ({
+      ...g,
+      areaItems: Object.fromEntries(master.areaItems.map((it) => [it.id, it.maxLevel])),
+      gates: Object.fromEntries(master.gates.map((x) => [x.id, x.maxLevel])),
+      honors: {
+        ...g.honors,
+        ...Object.fromEntries(master.honors.map((h) => [h.id, h.levels[h.levels.length - 1].level])),
+        ...Object.fromEntries(master.eventHonors.map((h) => [h.honorId, 1])),
+      },
+    }));
+  };
+
   const charItems = master.areaItems.filter((i) => i.group === "character");
   const unitItems = master.areaItems.filter((i) => i.group === "unit");
   const attrItems = master.areaItems.filter((i) => i.group === "attr");
@@ -107,13 +128,22 @@ export default function GrowthEditor({
             ))}
           </select>
         </label>
-        <p className="hint">0이나 빈칸은 아직 없는 아이템입니다.</p>
+        <div className="g-actions">
+          <button type="button" onClick={maxAll}>
+            전부 최대치로
+          </button>
+        </div>
+        <p className="hint">
+          0이나 빈칸은 아직 없는 아이템입니다. &quot;전부 최대치로&quot;는 캐릭터 랭크·에어리어 아이템·게이트·칭호를 한 번에
+          최대로 채워요.
+        </p>
       </section>
 
       <Section
         title="캐릭터 랭크"
         desc={`게임의 캐릭터 화면에 나오는 랭크를 입력하세요. 랭크가 오를수록 그 캐릭터 카드의 종합력이 올라가요(랭크 1마다 +${rankStep}%, 랭크 ${rankCap}에서 최대 +${rankMaxRate}%이고 그 위로는 같아요). 비워 둔 캐릭터는 1로 계산합니다.`}
         count={`${characters.filter((c) => ranks[c.id] !== undefined).length}/${characters.length}`}
+        onMax={() => characters.forEach((c) => setCharacterRank(c.id, master.maxCharacterRank))}
         onClear={() => characters.forEach((c) => setCharacterRank(c.id, null))}
       >
         <div className="g-grid">

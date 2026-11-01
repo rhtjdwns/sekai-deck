@@ -1,0 +1,76 @@
+/* ---------- 멀티 라이브 팀원 정보 ---------- */
+.team {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+.team summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 15px;
+}
+.team-count {
+  margin-left: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.team .hint {
+  margin: 8px 0 0;
+}
+.team-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px 14px;
+}
+.team-row {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.team-row legend {
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.team-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.team-row input {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: right;
+}
+.team-power {
+  width: 104px;
+}
+.team-skill {
+  width: 64px;
+}
+.team-actions {
+  margin-top: 10px;
+}
+.team-actions button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}

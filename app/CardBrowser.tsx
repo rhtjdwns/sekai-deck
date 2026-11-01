@@ -100,6 +100,21 @@ export default function CardBrowser({ snapshot }: { snapshot: MasterSnapshot }) 
   const visibleItems = filtered.map((c) => ({ id: c.id, canTrain: canTrain(c) }));
   const visibleOwnedIds = filtered.filter((c) => owned[c.id]).map((c) => c.id);
 
+  /** 보이는 보유 카드를 모두 최대치로: 특훈(가능한 카드만), 스킬 레벨 4, 마스터 랭크 5, 캔버스, 사이드 스토리 전편·후편 */
+  const maxVisibleOwned = () => {
+    if (
+      !confirm(
+        `보이는 보유 카드 ${visibleOwnedIds.length}장을 모두 최대치(특훈, 스킬 레벨 4, 마스터 랭크 5, 캔버스 제작, 사이드 스토리 전편·후편)로 바꿀까요?`,
+      )
+    )
+      return;
+    presetApi.setManyDetail(visibleOwnedIds, { masterRank: 5, skillLevel: 4, canvas: true, storyFirst: true, storySecond: true });
+    presetApi.setManyDetail(
+      filtered.filter((c) => owned[c.id] && canTrain(c)).map((c) => c.id),
+      { trained: true },
+    );
+  };
+
   return (
     <main className="page">
       <header className="masthead">
@@ -289,6 +304,11 @@ export default function CardBrowser({ snapshot }: { snapshot: MasterSnapshot }) 
                 보이는 카드 체크 해제
               </button>
               {visibleOwnedIds.length > 0 && (
+                <button type="button" onClick={maxVisibleOwned}>
+                  보이는 보유 {visibleOwnedIds.length}장 모두 최대치
+                </button>
+              )}
+              {visibleOwnedIds.length > 0 && (
                 <label className="bulk-skill">
                   보이는 보유 {visibleOwnedIds.length}장 스킬 레벨
                   <select
@@ -321,7 +341,11 @@ export default function CardBrowser({ snapshot }: { snapshot: MasterSnapshot }) 
       </div>
 
       {checkMode && (
-        <p className="hint">카드를 누르면 보유로 체크됩니다. 체크한 카드는 특훈 여부, 스킬 레벨, 마이세카이 캔버스 제작 여부, 사이드 스토리 전편·후편 읽음 여부, 마스터 랭크를 고를 수 있어요.</p>
+        <p className="hint">
+          카드를 누르면 보유로 체크됩니다. 체크한 카드는 특훈 여부, 스킬 레벨, 마이세카이 캔버스 제작 여부, 사이드 스토리
+          전편·후편 읽음 여부, 마스터 랭크를 고를 수 있어요. &quot;모두 최대치&quot;는 보이는 보유 카드를 특훈·스킬 레벨
+          4·마스터 랭크 5·캔버스·사이드 스토리 완료로 한 번에 바꿔요. 필터로 범위를 좁혀서 쓸 수 있어요.
+        </p>
       )}
 
       {filtered.length === 0 ? (

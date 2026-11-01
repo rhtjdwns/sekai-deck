@@ -10,6 +10,7 @@ import {
   LiveCalculator,
   LiveType,
   type DataProvider,
+  type DeckDetail,
   type MusicMeta,
   type UserCard,
 } from "sekai-calculator";
@@ -17,6 +18,7 @@ import { DeckSearchError, searchDecks, type ScoredDeck, type SearchSpec } from "
 import { clampCharacterRank, clampSkill, emptyGrowth, type Growth, type OwnedCard } from "./presets";
 import { fetchWithRetry } from "./fetchRetry";
 import { REGIONS, type Region } from "./region";
+import { makeTeamScorer, type Teammate } from "./teamScore";
 
 // ---------- 종합력 계산 보정 ----------
 // 라이브러리는 에어리어 아이템·캐릭터 랭크 보너스를 카드의 세 가지 파워 수치마다 따로 내림해서 더하는데,
@@ -157,6 +159,7 @@ export async function getMusicMetas(): Promise<MusicMeta[] | null> {
 
 // ---------- 추천 ----------
 export type LiveKind = "multi" | "solo" | "auto";
+export type { Teammate } from "./teamScore";
 
 export interface RecommendInput {
   eventId: number;
@@ -180,6 +183,8 @@ export interface RecommendInput {
   fixedLeaderCharacterId?: number | null;
   /** 월드 링크: 계산할 챕터의 캐릭터 */
   worldBloomCharacterId?: number | null;
+  /** 멀티·치어풀: 직접 입력한 팀원 정보 (최대 4명, 입력하지 않은 자리는 내 덱과 같다고 봄) */
+  teammates?: Teammate[];
   /** 서버 (없으면 한국 서버) */
   region?: Region;
 }
@@ -203,6 +208,8 @@ export interface RecommendResult {
   averagedSongs?: number;
   /** 월드 링크: 계산한 챕터 캐릭터 */
   worldBloomCharacterId?: number;
+  /** 계산에 반영한 팀원 수 (직접 입력한 사람만) */
+  teammatesUsed: number;
   musicId: number;
   difficulty: string;
   decks: {
@@ -391,7 +398,11 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
   if (leaderChar !== null && !fixedCharIds.includes(leaderChar)) fixedCharIds.push(leaderChar);
   if (fixedIds.length + fixedCharIds.length > 5) throw new RecommendError("카드와 캐릭터를 합쳐 5개까지 고정할 수 있어요.");
 
-  const decks = await findDecks(
+  // 팀원 정보는 멀티·치어풀 라이브에서만 의미가 있음
+  const teammates =
+    liveType === LiveType.MULTI || liveType === LiveType.CHEERFUL ? (input.teammates ?? []).slice(0, 4) : [];
+
+  const { decks, liveScoreOf } = await findDecks(
     provider,
     input.eventId,
     liveType,
@@ -399,6 +410,7 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
     userCards,
     { cards: fixedIds, leader: fixedLeader, characters: fixedCharIds, leaderCharacter: leaderChar },
     chapterChar,
+    teammates,
   );
 
   return {
@@ -409,11 +421,12 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
     musicTimeSource,
     averagedSongs,
     worldBloomCharacterId: chapterChar,
+    teammatesUsed: teammates.length,
     musicId: metaSource === "average" ? RANDOM_MUSIC_ID : musicMeta.music_id,
     difficulty: musicMeta.difficulty,
     decks: decks.map((d) => ({
       eventPoint: d.score,
-      liveScore: LiveCalculator.getLiveScoreByDeck(d, musicMeta, liveType),
+      liveScore: liveScoreOf(d),
       power: d.power.total,
       powerDetail: {
         base: d.power.base,
@@ -448,7 +461,7 @@ export class RecommendError extends Error {}
 
 /**
  * 덱 찾기: 이벤트 설정과 보유 카드 상세를 만들고, 빠른 탐색(lib/deckSearch.ts)으로 좋은 덱 3개를 고른다.
- * 고정 카드·캐릭터·리더 조건과 월드 링크 챕터도 이 탐색에서 함께 처리한다.
+ * 고정 카드·캐릭터·리더 조건과 월드 링크 챕터, 멀티 라이브 팀원 정보도 이 탐색에서 함께 처리한다.
  */
 async function findDecks(
   provider: DataProvider,
@@ -458,10 +471,15 @@ async function findDecks(
   userCards: UserCard[],
   spec: SearchSpec,
   chapterChar: number | undefined,
-): Promise<ScoredDeck[]> {
+  teammates: Teammate[],
+): Promise<{ decks: ScoredDeck[]; liveScoreOf: (deck: DeckDetail) => number }> {
   const eventConfig = await new EventService(provider).getEventConfig(eventId, chapterChar);
   if (eventConfig.eventType === undefined) throw new RecommendError("이벤트 종류를 알 수 없어요.");
-  const pointOf = EventCalculator.getEventPointFunction(liveType, eventConfig.eventType);
+  // 팀원을 입력했으면 팀원 정보로, 아니면 라이브러리 기본(5명 모두 내 덱과 같음)으로 점수 계산
+  const team = teammates.length > 0 ? makeTeamScorer(liveType, eventConfig.eventType, teammates) : null;
+  const pointOf = team ? team.point : EventCalculator.getEventPointFunction(liveType, eventConfig.eventType);
+  const liveScoreOf = (deck: DeckDetail) =>
+    team ? team.liveScore(musicMeta, deck) : LiveCalculator.getLiveScoreByDeck(deck, musicMeta, liveType);
   const honorBonus = await new DeckCalculator(provider).getHonorBonusPower();
   const areaItemLevels = await new AreaItemService(provider).getAreaItemLevels();
   const allCards = await new CardCalculator(provider).batchGetCardDetail(userCards, {}, eventConfig, areaItemLevels);
@@ -487,10 +505,11 @@ async function findDecks(
   }
 
   try {
-    return searchDecks(
+    const decks = searchDecks(
       { pool, allCards, honorBonus, eventConfig, score: (d) => pointOf(musicMeta, d), timeLimitMs: SEARCH_BUDGET_MS },
       s,
     );
+    return { decks, liveScoreOf };
   } catch (e) {
     if (e instanceof DeckSearchError) throw new RecommendError(e.message);
     throw e;
