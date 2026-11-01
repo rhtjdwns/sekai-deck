@@ -13,6 +13,8 @@ import "./fixedCards.css";
 
 /** 공방 랜덤 곡 (서버의 RANDOM_MUSIC_ID와 같은 값) */
 const RANDOM_SONG = -1;
+/** 계산 응답을 기다리는 최대 시간. 서버는 40초 안에 끝내거나 안내를 보냄 */
+const REQUEST_TIMEOUT_MS = 100_000;
 
 const RARITY_LABEL: Record<Rarity, string> = {
   rarity_4: "★4",
@@ -126,9 +128,16 @@ export default function DeckHelper({
   // 카드 대신 캐릭터만 고정 (그 캐릭터의 가장 좋은 카드를 골라 줌)
   const [fixedChars, setFixedChars] = useState<number[]>([]);
   const [fixedLeaderChar, setFixedLeaderChar] = useState<number | null>(null);
+  // 월드 링크: 이벤트별로 고른 챕터 캐릭터
+  const [chapterByEvent, setChapterByEvent] = useState<Record<number, number>>({});
 
   const event = eventId !== undefined ? eventById.get(eventId) : undefined;
   const isCheerful = event?.eventType === "cheerful_carnival";
+  // 월드 링크 챕터: 고른 값 → 지금 진행 중인 챕터 → 첫 챕터
+  const chapters = event?.chapters ?? [];
+  const nowMs = Date.now();
+  const defaultChapter = (chapters.find((c) => c.startAt <= nowMs && nowMs <= c.endAt) ?? chapters[0])?.characterId;
+  const chapterChar = event ? chapterByEvent[event.id] ?? defaultChapter : undefined;
 
   const owned = active?.cards ?? {};
   const ownedCount = Object.keys(owned).length;
@@ -214,8 +223,11 @@ export default function DeckHelper({
           fixedLeaderId: leaderOwned,
           fixedCharacterIds: charsOwned,
           fixedLeaderCharacterId: leaderCharOwned,
+          worldBloomCharacterId: chapterChar ?? null,
           region,
         }),
+        // 응답이 오지 않으면 무한히 기다리지 않도록
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "덱을 계산하지 못했습니다.");
@@ -232,7 +244,14 @@ export default function DeckHelper({
         },
       }));
     } catch (e) {
-      setErrors((s) => ({ ...s, [id]: (e as Error).message }));
+      const err = e as Error;
+      const timedOut = err.name === "TimeoutError" || err.name === "AbortError";
+      setErrors((s) => ({
+        ...s,
+        [id]: timedOut
+          ? "계산이 너무 오래 걸려서 기다리기를 멈췄어요. 꼭 넣을 카드나 캐릭터를 몇 개 고정하면 훨씬 빨라져요. 잠시 후 다시 시도해 주세요."
+          : err.message,
+      }));
     } finally {
       setLoadingId(null);
     }
@@ -345,6 +364,22 @@ export default function DeckHelper({
                   </select>
                 </label>
 
+                {chapters.length > 0 && (
+                  <label className="field">
+                    <span>월드 링크 챕터</span>
+                    <select
+                      value={chapterChar}
+                      onChange={(e) => setChapterByEvent((m) => ({ ...m, [event.id]: Number(e.target.value) }))}
+                    >
+                      {chapters.map((c) => (
+                        <option key={c.characterId} value={c.characterId}>
+                          {c.chapterNo}장 {charName.get(c.characterId)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
                 <fieldset className="field">
                   <legend>라이브</legend>
                   <div className="seg">
@@ -400,6 +435,18 @@ export default function DeckHelper({
                   {loadingId === event.id ? "계산 중…" : current ? "다시 계산" : "최적 덱 찾기"}
                 </button>
               </section>
+
+              {chapters.length > 0 && (
+                <p className="hint">
+                  월드 링크는 챕터마다 보너스 캐릭터와 서포트 덱이 달라서, 고른 챕터 기준으로 계산해요.
+                </p>
+              )}
+              {event.finale && (
+                <p className="hint warn-song">
+                  월드 링크 파이널은 확인할 카드 조합이 아주 많아서 계산이 오래 걸릴 수 있어요. 40초 안에 끝나지 않으면 안내가
+                  나오니, 그때는 꼭 넣을 카드나 캐릭터를 몇 개 고정해 주세요.
+                </p>
+              )}
 
               <section className="fixed-cards" aria-label="고정할 카드">
                 <div className="fixed-head">
@@ -664,6 +711,7 @@ function Results({
         <p className="sub">
           {songTitle.get(result.musicId) ?? `곡 ${result.musicId}`} {result.difficulty.toUpperCase()},{" "}
           {RESULT_LIVE_LABEL[result.liveType]} 1회 기준, &quot;{saved.presetName}&quot; 프리셋
+          {result.worldBloomCharacterId !== undefined && `, ${charName.get(result.worldBloomCharacterId)} 챕터`}
           {result.metaSource === "estimated" && <span className="est-badge">추정</span>}
           {result.metaSource === "average" && <span className="est-badge">평균</span>}
         </p>

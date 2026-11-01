@@ -2,20 +2,18 @@
 import "server-only";
 import {
   AreaItemService,
-  BaseDeckRecommend,
   CardCalculator,
   CardPowerCalculator,
   DeckCalculator,
   EventCalculator,
-  EventDeckRecommend,
   EventService,
   LiveCalculator,
   LiveType,
   type DataProvider,
-  type DeckDetail,
   type MusicMeta,
   type UserCard,
 } from "sekai-calculator";
+import { DeckSearchError, searchDecks, type ScoredDeck, type SearchSpec } from "./deckSearch";
 import { clampCharacterRank, clampSkill, emptyGrowth, type Growth, type OwnedCard } from "./presets";
 import { fetchWithRetry } from "./fetchRetry";
 import { REGIONS, type Region } from "./region";
@@ -107,6 +105,9 @@ export const KNOWN_MUSIC_TIMES: Record<number, number> = {
   10004: 146, // 벚꽃비 2분 26초
 };
 
+/** 덱 탐색 시간 상한. 넘으면 그때까지 찾은 가장 좋은 덱을 돌려줌 (보통 1초 안에 끝남) */
+const SEARCH_BUDGET_MS = 20_000;
+
 // ---------- 메모리 캐시 (큰 JSON이라 Next 데이터 캐시 대신 사용) ----------
 const memo = new Map<string, { at: number; value: Promise<unknown> }>();
 
@@ -177,6 +178,8 @@ export interface RecommendInput {
   fixedCharacterIds?: number[];
   /** 리더로 고정할 캐릭터 */
   fixedLeaderCharacterId?: number | null;
+  /** 월드 링크: 계산할 챕터의 캐릭터 */
+  worldBloomCharacterId?: number | null;
   /** 서버 (없으면 한국 서버) */
   region?: Region;
 }
@@ -198,6 +201,8 @@ export interface RecommendResult {
   musicTimeSource: "input" | "known" | "estimated" | null;
   /** 랜덤 곡일 때 평균에 쓴 곡 수 */
   averagedSongs?: number;
+  /** 월드 링크: 계산한 챕터 캐릭터 */
+  worldBloomCharacterId?: number;
   musicId: number;
   difficulty: string;
   decks: {
@@ -354,6 +359,14 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
     getMusicMeta: async () => metas ?? [FALLBACK_META],
   };
 
+  // 월드 링크: 고른 챕터의 캐릭터로 계산 (챕터마다 보너스 캐릭터·유닛과 서포트 덱이 달라짐)
+  let chapterChar: number | undefined;
+  if (event.eventType === "world_bloom" && input.worldBloomCharacterId) {
+    const blooms = await getMasterFile<{ eventId: number; gameCharacterId?: number }>("worldBlooms", region);
+    const wanted = Number(input.worldBloomCharacterId);
+    if (blooms.some((w) => w.eventId === input.eventId && w.gameCharacterId === wanted)) chapterChar = wanted;
+  }
+
   // 고정 카드 확인
   const fixedIds = Array.from(new Set((input.fixedCardIds ?? []).map(Number))).filter((id) => input.cards[id]);
   if (fixedIds.length > 5) throw new RecommendError("고정할 수 있는 카드는 5장까지예요.");
@@ -378,15 +391,15 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
   if (leaderChar !== null && !fixedCharIds.includes(leaderChar)) fixedCharIds.push(leaderChar);
   if (fixedIds.length + fixedCharIds.length > 5) throw new RecommendError("카드와 캐릭터를 합쳐 5개까지 고정할 수 있어요.");
 
-  const decks =
-    fixedIds.length > 0 || fixedCharIds.length > 0
-      ? await recommendWithFixed(provider, input.eventId, liveType, musicMeta, userCards, characterOf, {
-          cards: fixedIds,
-          leader: fixedLeader,
-          characters: fixedCharIds,
-          leaderCharacter: leaderChar,
-        })
-      : await recommendFree(provider, input.eventId, liveType, musicMeta);
+  const decks = await findDecks(
+    provider,
+    input.eventId,
+    liveType,
+    musicMeta,
+    userCards,
+    { cards: fixedIds, leader: fixedLeader, characters: fixedCharIds, leaderCharacter: leaderChar },
+    chapterChar,
+  );
 
   return {
     eventId: input.eventId,
@@ -395,6 +408,7 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
     musicTime: Math.round(musicMeta.music_time * 10) / 10,
     musicTimeSource,
     averagedSongs,
+    worldBloomCharacterId: chapterChar,
     musicId: metaSource === "average" ? RANDOM_MUSIC_ID : musicMeta.music_id,
     difficulty: musicMeta.difficulty,
     decks: decks.map((d) => ({
@@ -432,162 +446,56 @@ export async function recommendDecks(input: RecommendInput): Promise<RecommendRe
 
 export class RecommendError extends Error {}
 
-type ScoredDeck = DeckDetail & { score: number };
-
-/** 후보 덱 3개를 찾되, 카드가 적어 3개를 못 만들면 2개, 1개로 줄여서 다시 시도 (라이브러리는 요청한 개수를 못 채우면 오류를 냄) */
-async function withFewerOnFailure<T>(run: (limit: number) => Promise<T[]>): Promise<T[]> {
-  for (const limit of [3, 2, 1]) {
-    try {
-      return await run(limit);
-    } catch (e) {
-      const cannot = String((e as Error)?.message).includes("Cannot recommend");
-      if (!cannot) throw e;
-      if (limit === 1) throw new RecommendError("가진 카드로 덱을 만들 수 없었어요. 보유 카드를 더 추가해 주세요.");
-    }
-  }
-  return [];
-}
-
-/** 고정 카드 없이 가장 좋은 덱 */
-async function recommendFree(provider: DataProvider, eventId: number, liveType: LiveType, musicMeta: MusicMeta) {
-  const recommender = new EventDeckRecommend(provider);
-  return withFewerOnFailure((limit) => recommender.recommendEventDeck(eventId, liveType, { musicMeta, limit }));
-}
-
-/** 고정 조건: 꼭 넣을 카드, 리더 카드, 꼭 넣을 캐릭터, 리더 캐릭터 */
-interface FixedSpec {
-  cards: number[];
-  leader: number | null;
-  characters: number[];
-  leaderCharacter: number | null;
-}
-
-/** 고정 캐릭터마다 시험해 볼 카드 조합 수 상한 (넘으면 캐릭터별 후보를 종합력 높은 순으로 줄임) */
-const MAX_CHARACTER_COMBOS = 60;
-
 /**
- * 고정 카드·캐릭터를 반드시 넣은 덱.
- * 캐릭터를 고정하면 그 캐릭터의 보유 카드를 하나씩 넣어 보며(다른 카드보다 모든 면에서 약한 카드는 제외),
- * 각 경우마다 나머지 자리를 라이브러리의 덱 탐색으로 채운 뒤 가장 좋은 덱을 고른다.
- * 점수는 언제나 "고정 카드 + 고른 카드" 5장 덱으로 매긴다.
- * 리더를 고정하면 그 카드(또는 그 캐릭터로 고른 카드)를 첫 자리에, 아니면 스킬이 가장 센 카드를 리더로 둔다.
+ * 덱 찾기: 이벤트 설정과 보유 카드 상세를 만들고, 빠른 탐색(lib/deckSearch.ts)으로 좋은 덱 3개를 고른다.
+ * 고정 카드·캐릭터·리더 조건과 월드 링크 챕터도 이 탐색에서 함께 처리한다.
  */
-async function recommendWithFixed(
+async function findDecks(
   provider: DataProvider,
   eventId: number,
   liveType: LiveType,
   musicMeta: MusicMeta,
   userCards: UserCard[],
-  characterOf: Map<number, number>,
-  spec: FixedSpec,
+  spec: SearchSpec,
+  chapterChar: number | undefined,
 ): Promise<ScoredDeck[]> {
-  const eventConfig = await new EventService(provider).getEventConfig(eventId);
+  const eventConfig = await new EventService(provider).getEventConfig(eventId, chapterChar);
   if (eventConfig.eventType === undefined) throw new RecommendError("이벤트 종류를 알 수 없어요.");
   const pointOf = EventCalculator.getEventPointFunction(liveType, eventConfig.eventType);
   const honorBonus = await new DeckCalculator(provider).getHonorBonusPower();
   const areaItemLevels = await new AreaItemService(provider).getAreaItemLevels();
-  const allDetails = await new CardCalculator(provider).batchGetCardDetail(userCards, {}, eventConfig, areaItemLevels);
-  const detailById = new Map(allDetails.map((c) => [c.cardId, c]));
-  const base = new BaseDeckRecommend(provider);
+  const allCards = await new CardCalculator(provider).batchGetCardDetail(userCards, {}, eventConfig, areaItemLevels);
 
-  /** 카드 5장으로 덱 상세와 이벤트 포인트 계산 (리더 자리 정리 포함) */
-  const evaluate = (ids: number[], leader: number | null): ScoredDeck => {
-    let order = [...ids];
-    if (leader !== null) order = [leader, ...order.filter((id) => id !== leader)];
-    const detailOf = (list: number[]) =>
-      DeckCalculator.getDeckDetailByCards(
-        list.map((id) => detailById.get(id)!),
-        allDetails,
-        honorBonus,
-        eventConfig.cardBonusCountLimit,
-        eventConfig.worldBloomDifferentAttributeBonuses,
-      );
-    let deck = detailOf(order);
-    if (leader === null) {
-      // 스킬 효과가 가장 큰 카드를 리더로
-      let best = 0;
-      deck.cards.forEach((c, i) => {
-        if (c.skill.scoreUp > deck.cards[best].skill.scoreUp) best = i;
-      });
-      if (best !== 0) {
-        const id = deck.cards[best].cardId;
-        order = [id, ...order.filter((x) => x !== id)];
-        deck = detailOf(order);
-      }
-    }
-    return Object.assign(deck, { score: pointOf(musicMeta, deck) });
-  };
+  // 월드 링크: 라이브러리와 같이 그 유닛 카드(버추얼 싱어 포함)만 후보로
+  const unit = eventConfig.worldBloomSupportUnit ?? eventConfig.eventUnit;
+  const pool = unit
+    ? allCards.filter((c) => (c.units.length === 1 && c.units[0] === "piapro") || c.units.includes(unit))
+    : allCards;
 
-  /** 정해진 카드들을 넣고 나머지 자리를 채운 덱 (좋은 순) */
-  const searchWith = async (fixedIds: number[], leader: number | null): Promise<ScoredDeck[]> => {
-    const rest = 5 - fixedIds.length;
-    if (rest === 0) return [evaluate(fixedIds, leader)];
-    // 나머지 자리 후보: 고정 카드·고정 캐릭터의 카드는 뺌
-    const blocked = new Set([...fixedIds.map((id) => characterOf.get(id)), ...spec.characters]);
-    const pool = userCards.filter((c) => !blocked.has(characterOf.get(c.cardId)!));
-    const poolChars = new Set(pool.map((c) => characterOf.get(c.cardId))).size;
-    if (poolChars < rest) {
-      throw new RecommendError(`고정한 카드·캐릭터 말고 다른 캐릭터의 카드가 ${rest}명 더 필요해요. 지금은 ${poolChars}명이에요.`);
-    }
-    const partial = await withFewerOnFailure((limit) =>
-      base.recommendHighScoreDeck(
-        pool,
-        (_meta, partialDeck) => evaluate([...fixedIds, ...partialDeck.cards.map((c) => c.cardId)], leader).score,
-        { musicMeta, limit, member: rest },
-        liveType,
-        eventConfig,
-      ),
-    );
-    return partial.map((p) => evaluate([...fixedIds, ...p.cards.map((c) => c.cardId)], leader));
-  };
-
-  // 고정 캐릭터별 후보 카드: 같은 캐릭터의 다른 카드보다 모든 면에서 약한 카드는 뺌
-  const candidates = spec.characters.map((ch) => {
-    const own = allDetails.filter((d) => d.characterId === ch);
-    const kept = own.filter(
-      (a, i) => !own.some((b, j) => j !== i && CardCalculator.isCertainlyLessThan(a, b) && !(CardCalculator.isCertainlyLessThan(b, a) && j > i)),
-    );
-    return (kept.length ? kept : own).map((d) => d.cardId);
-  });
-  // 조합이 너무 많으면 캐릭터별 후보를 종합력이 높은 순으로 줄임
-  const totalCombos = candidates.reduce((n, list) => n * list.length, 1);
-  if (totalCombos > MAX_CHARACTER_COMBOS) {
-    const per = Math.max(1, Math.floor(Math.pow(MAX_CHARACTER_COMBOS, 1 / candidates.length)));
-    const powerOf = (id: number) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const p = detailById.get(id)!.power as any;
-      return Number(p.max ?? 0);
-    };
-    candidates.forEach((list, i) => {
-      candidates[i] = [...list].sort((a, b) => powerOf(b) - powerOf(a)).slice(0, per);
-    });
+  // 월드 링크 파이널: 리더를 따로 정하지 않았으면 그 회차 캐릭터가 리더
+  let s = spec;
+  const special = eventConfig.worldBloomType === "finale" ? eventConfig.specialCharacterId : undefined;
+  if (special && s.leader === null && s.leaderCharacter === null && allCards.some((c) => c.characterId === special)) {
+    const fixedOfSpecial = s.cards.find((id) => allCards.find((c) => c.cardId === id)?.characterId === special);
+    s =
+      fixedOfSpecial !== undefined
+        ? { ...s, leader: fixedOfSpecial }
+        : {
+            ...s,
+            leaderCharacter: special,
+            characters: s.characters.includes(special) ? s.characters : [...s.characters, special],
+          };
   }
 
-  // 후보 카드 조합마다 덱을 찾고, 전체에서 좋은 순으로 3개
-  let combos: number[][] = [[]];
-  for (const list of candidates) combos = combos.flatMap((c) => list.map((id) => [...c, id]));
-  const leaderIndex = spec.leaderCharacter === null ? -1 : spec.characters.indexOf(spec.leaderCharacter);
-  const found: ScoredDeck[] = [];
-  let lastError: unknown = null;
-  for (const combo of combos) {
-    const leader = spec.leader ?? (leaderIndex >= 0 ? combo[leaderIndex] : null);
-    try {
-      found.push(...(await searchWith([...spec.cards, ...combo], leader)));
-    } catch (e) {
-      lastError = e;
-    }
+  try {
+    return searchDecks(
+      { pool, allCards, honorBonus, eventConfig, score: (d) => pointOf(musicMeta, d), timeLimitMs: SEARCH_BUDGET_MS },
+      s,
+    );
+  } catch (e) {
+    if (e instanceof DeckSearchError) throw new RecommendError(e.message);
+    throw e;
   }
-  if (found.length === 0) throw lastError ?? new RecommendError("조건에 맞는 덱을 찾지 못했어요.");
-  const seen = new Set<string>();
-  return found
-    .sort((a, b) => b.score - a.score)
-    .filter((d) => {
-      const key = d.cards.map((c) => c.cardId).join(",");
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 3);
 }
 
 /**

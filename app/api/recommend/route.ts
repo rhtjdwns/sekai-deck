@@ -4,7 +4,7 @@ import { RecommendError, recommendDecks, type LiveKind, type RecommendInput } fr
 import { regionOfRequest } from "@/lib/region";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 90;
 
 const LIVE_KINDS: LiveKind[] = ["multi", "solo", "auto"];
 
@@ -34,6 +34,8 @@ export async function POST(req: Request) {
       : [],
     fixedLeaderCharacterId:
       Number(body.fixedLeaderCharacterId) >= 1 && Number(body.fixedLeaderCharacterId) <= 26 ? Number(body.fixedLeaderCharacterId) : null,
+    worldBloomCharacterId:
+      Number(body.worldBloomCharacterId) >= 1 && Number(body.worldBloomCharacterId) <= 26 ? Number(body.worldBloomCharacterId) : null,
     region: regionOfRequest(req, body.region),
   };
   if (!Number.isFinite(input.eventId) || input.eventId <= 0) {
