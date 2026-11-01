@@ -466,11 +466,10 @@ async function findDecks(
   const areaItemLevels = await new AreaItemService(provider).getAreaItemLevels();
   const allCards = await new CardCalculator(provider).batchGetCardDetail(userCards, {}, eventConfig, areaItemLevels);
 
-  // 월드 링크: 라이브러리와 같이 그 유닛 카드(버추얼 싱어 포함)만 후보로
-  const unit = eventConfig.worldBloomSupportUnit ?? eventConfig.eventUnit;
-  const pool = unit
-    ? allCards.filter((c) => (c.units.length === 1 && c.units[0] === "piapro") || c.units.includes(unit))
-    : allCards;
+  // 후보는 보유 카드 전체. 라이브러리는 월드 링크에서 계산량을 줄이려고 챕터 유닛 카드만 후보로 쓰는데,
+  // 메인 덱에는 다른 유닛 카드도 넣을 수 있어서, 보너스 캐릭터가 여러 유닛에 있는 월드 링크에서는
+  // 보너스 카드가 빠진 덱이 나왔다. 새 탐색은 빨라서 줄일 필요가 없다. (유닛 제한은 서포트 덱 계산에만 쓰임)
+  const pool = allCards;
 
   // 월드 링크 파이널: 리더를 따로 정하지 않았으면 그 회차 캐릭터가 리더
   let s = spec;
